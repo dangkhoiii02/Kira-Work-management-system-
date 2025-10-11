@@ -13,7 +13,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-14 z-40 flex h-[calc(100vh-3.5rem)] flex-col border-r border-border bg-sidebar transition-all duration-300",
+        "fixed left-0 top-14 z-[60] h-[calc(100vh-3.5rem)] border-r border-border bg-card shadow-lg transition-all duration-300",
         isOpen ? "w-64" : "w-0 overflow-hidden",
       )}
     >
