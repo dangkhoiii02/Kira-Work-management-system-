@@ -1,50 +1,80 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { KanbanBoard } from "../src/components/kanban-board"
-import { Sidebar } from "../src/components/sidebar"
-import { TopNav } from "../src/components/top-nav"
-import { AuthPage } from "../src/components/auth-page"
+import { useState } from "react"
+import { Sidebar } from "./components/sidebar"
+import { TopNav } from "./components/top-nav"
+import { AuthPage } from "./components/auth-page"
+import { SummaryView } from "./components/summary-view"
+import { ListView } from "./components/list-view"
 
-export default function Home() {
+// Khai báo kiểu User cục bộ để tránh import type từ BE
+type FEUser = {
+  id: number
+  nick_name: string
+  email: string
+}
+
+export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [activeView, setActiveView] = useState<"summary" | "list">("summary")
+  const [user, setUser] = useState<FEUser | null>(null)
+  const [projectId, setProjectId] = useState<number | undefined>(undefined)
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(true)
-      } else {
-        setSidebarOpen(false)
-      }
-    }
+  /** Sau khi đăng nhập/đăng ký thành công */
+  function handleAuthSuccess(u: FEUser, projId?: number) {
+    setUser(u)
+    setProjectId(projId)
+    setIsAuthenticated(true)
+    setActiveView("list") // chuyển thẳng sang List để tạo task
+  }
 
-    handleResize()
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
-
-  if (!isAuthenticated) {
-    return <AuthPage onGetStarted={() => setIsAuthenticated(true)} />
+  // Chưa đăng nhập → chỉ hiện trang Auth
+  if (!isAuthenticated || !user) {
+    return <AuthPage onAuthSuccess={handleAuthSuccess} />
   }
 
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* Top Navigation - Full Width */}
-      <TopNav onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+      {/* onMenuClick không làm gì để tránh mở sidebar */}
+      <TopNav onMenuClick={() => {}} />
 
       {/* Main Content Area - Below Header */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+        {/* Sidebar luôn đóng */}
+        <Sidebar isOpen={false} onToggle={() => {}} />
 
-        {sidebarOpen && (
-          <div className="fixed inset-0 top-14 bg-black/50 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} />
-        )}
+        {/* KHÔNG có overlay vì sidebar luôn đóng */}
 
         {/* Main Content */}
-        <main className={`flex-1 overflow-auto transition-all duration-300 ${sidebarOpen ? "lg:ml-64" : "ml-0"}`}>
-          <KanbanBoard />
+        <main className="flex-1 overflow-auto transition-all duration-300 ml-0">
+          {/* Công tắc view nhỏ gọn */}
+          <div className="px-4 pt-4">
+            <div className="inline-flex gap-2">
+              <button
+                className={`px-3 py-1 rounded border text-sm ${
+                  activeView === "summary" ? "bg-muted" : "bg-transparent"
+                }`}
+                onClick={() => setActiveView("summary")}
+              >
+                Summary
+              </button>
+              <button
+                className={`px-3 py-1 rounded border text-sm ${
+                  activeView === "list" ? "bg-muted" : "bg-transparent"
+                }`}
+                onClick={() => setActiveView("list")}
+              >
+                List
+              </button>
+            </div>
+          </div>
+
+          {activeView === "summary" ? (
+            <SummaryView projectId={projectId} />
+          ) : (
+            <ListView user={user} projectId={projectId} />
+          )}
         </main>
       </div>
     </div>

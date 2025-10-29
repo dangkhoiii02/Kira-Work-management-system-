@@ -1,8 +1,5 @@
-// routes/auth.js
-const expressLib = require('express');
-const express = expressLib.default || expressLib;   // ✅
-const router = express.Router();                     // ✅
-
+const express = require('express');
+const router = express.Router();
 const z = require('zod');
 const validate = require('../middleware/validate');
 const ctrl = require('../controllers/auth.controller');

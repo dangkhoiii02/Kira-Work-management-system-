@@ -19,11 +19,12 @@ exports.register = async (req, res, next) => {
 
 exports.login = async (req, res, next) => {
   try {
-    const { token, user } = await svc.login(req.valid.body);
+    const { token, user, project } = await svc.login(req.valid.body);
     res.cookie('token', token, cookieOpts);
-    res.json({ user });
+    res.json({ user, project });
   } catch (e) { next(e); }
 };
+
 
 exports.logout = async (_req, res, _next) => {
   res.clearCookie('token', { ...cookieOpts, maxAge: 0 });

@@ -1,36 +1,91 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { CheckCircle2, Edit3, FileText, Calendar, TrendingUp, Minus, ChevronDown } from "lucide-react"
 import { Card } from "../components/ui/card"
 import { Button } from "../components/ui/button"
+import { beListByProject } from "../lib/be"
 
-const stats = [
-  { label: "0 completed", sublabel: "in the last 7 days", icon: CheckCircle2 },
-  { label: "0 updated", sublabel: "in the last 7 days", icon: Edit3 },
-  { label: "0 created", sublabel: "in the last 7 days", icon: FileText },
-  { label: "0 due soon", sublabel: "in the next 7 days", icon: Calendar },
-]
+type FE_Task = {
+  id: number
+  percent_done?: number
+  created_at?: string
+  updated_at?: string
+  due_date?: string
+  priority_name?: string
+}
 
-const workTypes = [
-  { type: "Epic", icon: "⚡", color: "text-purple-600", distribution: 0 },
-  { type: "Task", icon: "✓", color: "text-blue-600", distribution: 0 },
-  { type: "Subtask", icon: "🔗", color: "text-blue-600", distribution: 0 },
-]
+interface SummaryViewProps {
+  projectId?: number
+}
 
-const priorities = [
-  { label: "Highest", icon: TrendingUp, color: "text-red-600" },
-  { label: "High", icon: TrendingUp, color: "text-orange-600" },
-  { label: "Medium", icon: Minus, color: "text-yellow-600" },
-  { label: "Low", icon: ChevronDown, color: "text-green-600" },
-  { label: "Lowest", icon: ChevronDown, color: "text-blue-600" },
-]
+export function SummaryView({ projectId }: SummaryViewProps) {
+  const [items, setItems] = useState<FE_Task[]>([])
+  const [loading, setLoading] = useState(false)
 
-export function SummaryView() {
+  useEffect(() => {
+    async function load() {
+      if (!projectId) return
+      setLoading(true)
+      try {
+        const res = await beListByProject(projectId, 1, 200)
+        setItems(res.items as any)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [projectId])
+
+  const last7 = useMemo(() => {
+    const now = Date.now()
+    const weekAgo = now - 7 * 24 * 3600 * 1000
+    return items.filter((it) => {
+      const t = it.updated_at ? Date.parse(it.updated_at) : 0
+      return t && t >= weekAgo
+    })
+  }, [items])
+
+  const created7 = useMemo(() => {
+    const now = Date.now()
+    const weekAgo = now - 7 * 24 * 3600 * 1000
+    return items.filter((it) => {
+      const t = it.created_at ? Date.parse(it.created_at) : 0
+      return t && t >= weekAgo
+    })
+  }, [items])
+
+  const dueSoon = useMemo(() => {
+    const now = Date.now()
+    const next7 = now + 7 * 24 * 3600 * 1000
+    return items.filter((it) => {
+      const t = it.due_date ? Date.parse(it.due_date) : 0
+      return t && t >= now && t <= next7
+    })
+  }, [items])
+
+  const completed = useMemo(() => items.filter((it) => (it.percent_done ?? 0) >= 100), [items])
+
+  const stats = [
+    { label: `${completed.length} completed`, sublabel: "in the last 7 days", icon: CheckCircle2 },
+    { label: `${last7.length} updated`, sublabel: "in the last 7 days", icon: Edit3 },
+    { label: `${created7.length} created`, sublabel: "in the last 7 days", icon: FileText },
+    { label: `${dueSoon.length} due soon`, sublabel: "in the next 7 days", icon: Calendar },
+  ]
+
+  const priorities = [
+    { label: "Highest", icon: TrendingUp, color: "text-red-600" },
+    { label: "High", icon: TrendingUp, color: "text-orange-600" },
+    { label: "Medium", icon: Minus, color: "text-yellow-600" },
+    { label: "Low", icon: ChevronDown, color: "text-green-600" },
+    { label: "Lowest", icon: ChevronDown, color: "text-blue-600" },
+  ]
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
       {/* Filter Button */}
       <div>
-        <Button variant="outline" className="gap-2 bg-transparent h-9 text-sm">
+        <Button variant="outline" className="gap-2 bg-transparent h-9 text-sm" disabled={loading}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18M3 12h12M3 20h6" />
           </svg>
@@ -40,7 +95,7 @@ export function SummaryView() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {stats.map((stat, index) => {
-          const Icon = stat.icon
+          const Icon = stat.icon as any
           return (
             <Card key={index} className="p-3 sm:p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start gap-2 sm:gap-3">
@@ -68,7 +123,7 @@ export function SummaryView() {
             </a>
           </p>
           <div className="flex flex-col items-center justify-center py-8 sm:py-12">
-            <div className="text-4xl sm:text-6xl font-bold text-foreground mb-2">0</div>
+            <div className="text-4xl sm:text-6xl font-bold text-foreground mb-2">{items.length}</div>
             <div className="text-xs sm:text-sm text-muted-foreground font-medium">Total work</div>
             <div className="text-xs sm:text-sm text-muted-foreground font-medium">items</div>
           </div>
@@ -84,9 +139,11 @@ export function SummaryView() {
               </div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">No activity yet</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2">{items.length ? "Activity incoming" : "No activity yet"}</h3>
           <p className="text-xs sm:text-sm text-muted-foreground text-center max-w-md px-2">
-            Create a few work items and invite some teammates to your project to see your project activity.
+            {items.length
+              ? "Keep tracking progress and due dates."
+              : "Create a few work items and invite some teammates to your project to see your project activity."}
           </p>
         </Card>
       </div>
@@ -110,7 +167,7 @@ export function SummaryView() {
             {/* X-axis labels */}
             <div className="absolute -bottom-8 left-0 right-0 flex justify-between px-2 sm:px-4">
               {priorities.map((priority, index) => {
-                const Icon = priority.icon
+                const Icon = priority.icon as any
                 return (
                   <div key={index} className="flex items-center gap-0.5 sm:gap-1 text-xs">
                     <Icon className={`h-3 w-3 ${priority.color}`} />
@@ -137,14 +194,14 @@ export function SummaryView() {
               <div>Type</div>
               <div>Distribution</div>
             </div>
-            {workTypes.map((workType, index) => (
+            {["Epic", "Task", "Subtask"].map((type, index) => (
               <div
                 key={index}
                 className="grid grid-cols-[80px_1fr] sm:grid-cols-[100px_1fr] gap-3 sm:gap-4 items-center"
               >
                 <div className="flex items-center gap-1 sm:gap-2">
-                  <span className={workType.color}>{workType.icon}</span>
-                  <span className="text-xs sm:text-sm">{workType.type}</span>
+                  <span className={index === 0 ? "text-purple-600" : "text-blue-600"}>{index === 0 ? "⚡" : "✓"}</span>
+                  <span className="text-xs sm:text-sm">{type}</span>
                 </div>
                 <div className="h-6 sm:h-8 bg-muted rounded"></div>
               </div>
