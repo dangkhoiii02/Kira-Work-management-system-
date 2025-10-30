@@ -112,17 +112,26 @@ export async function beCreateTask(payload: CreateTaskInput) {
   });
 }
 
-export async function beAssignByEmail(taskId: number, assigneeEmail: string) {
-  if (!assigneeEmail) return { ok: true };
-  return http<any>(`/tasks/${taskId}/assign-email`, {
+// src/lib/be.ts (chỉ đoạn này)
+export async function beAssignByEmail(taskId: number, email: string) {
+  // khớp Postman: POST /api/tasks/:id/assign-email
+  return http(`/tasks/${taskId}/assign-email`, {
     method: "POST",
-    body: JSON.stringify({ email: assigneeEmail }),
+    body: JSON.stringify({ email }),
   });
 }
+
 
 export async function beListByProject(projectId: number, page = 1, limit = 50) {
   return http<{ items: any[]; total: number }>(`/tasks/project/${projectId}`, {
     method: "GET",
     query: { page, limit },
   });
+}
+// lib/be.ts
+export async function beUpdateProgress(taskId: number, percent_done: number) {
+  return http(`/tasks/${taskId}/progress`, {
+    method: "PATCH",
+    body: JSON.stringify({ percent_done }),
+  })
 }

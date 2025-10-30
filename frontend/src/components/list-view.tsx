@@ -1,13 +1,23 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Search, Plus, MoreHorizontal } from "lucide-react"
+import { Search, Plus, MoreHorizontal, Send } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu"
 import { Checkbox } from "../components/ui/checkbox"
-import { beCreateTask, beAssignByEmail, beListByProject } from "../lib/be"
+import { Label } from "../components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog"
+
+import { beCreateTask, beAssignByEmail, beListByProject, beUpdateProgress } from "../lib/be"
 
 type FE_Task = {
   id: number
@@ -27,14 +37,31 @@ interface ListViewProps {
 export function ListView({ projectId, user }: ListViewProps) {
   const [hasItems, setHasItems] = useState(false)
   const [items, setItems] = useState<FE_Task[]>([])
-  const [creating, setCreating] = useState(false)
+
+  // modal: create task
+  const [taskOpen, setTaskOpen] = useState(false)
+
+  // form create
   const [title, setTitle] = useState("")
-  const [assigneeEmail, setAssigneeEmail] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState<"LOW" | "MEDIUM" | "HIGH" | "URGENT">("MEDIUM")
   const [status, setStatus] = useState<"OPEN" | "IN_PROGRESS" | "DONE">("OPEN")
+
+  // modal: assign by email
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignTaskId, setAssignTaskId] = useState<number | null>(null)
+  const [assignEmail, setAssignEmail] = useState("")
+  const [assignLoading, setAssignLoading] = useState(false)
+  const [assignError, setAssignError] = useState<string | null>(null)
+  const [assignOK, setAssignOK] = useState<string | null>(null)
+
+  // misc
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // per-row save state
+  const [saving, setSaving] = useState<Record<number, boolean>>({})
+  const [rowErr, setRowErr] = useState<Record<number, string | undefined>>({})
 
   const statusId = useMemo(() => ({ OPEN: 1, IN_PROGRESS: 2, DONE: 3 }[status]), [status])
   const priorityId = useMemo(() => ({ LOW: 1, MEDIUM: 2, HIGH: 3, URGENT: 4 }[priority]), [priority])
@@ -58,12 +85,7 @@ export function ListView({ projectId, user }: ListViewProps) {
 
   function toIsoDateOnly(d: string) {
     if (!d) return undefined
-    try {
-      const dt = new Date(d + "T00:00:00")
-      return dt.toISOString()
-    } catch {
-      return undefined
-    }
+    try { return new Date(d + "T00:00:00").toISOString() } catch { return undefined }
   }
 
   async function handleCreate() {
@@ -87,24 +109,73 @@ export function ListView({ projectId, user }: ListViewProps) {
         creator_id: user.id,
         due_date: toIsoDateOnly(dueDate),
       }
-
-      const newTask = await beCreateTask(payload as any)
-
-      if (assigneeEmail.trim()) {
-        await beAssignByEmail(newTask.id ?? newTask?.task_id ?? newTask?.data?.id, assigneeEmail.trim())
-      }
-
+      await beCreateTask(payload as any)
       await load()
 
+      // reset & close
       setTitle("")
-      setAssigneeEmail("")
       setDueDate("")
-      setCreating(false)
+      setStatus("OPEN")
+      setPriority("MEDIUM")
+      setTaskOpen(false)
       setHasItems(true)
     } catch (e: any) {
       setError(e?.message || "Create failed")
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ===== Progress helpers =====
+  function setLocalProgress(taskId: number, p: number) {
+    setItems((prev) => prev.map((t) => (t.id === taskId ? { ...t, percent_done: p } : t)))
+  }
+
+  async function saveProgress(taskId: number, p: number) {
+    setSaving((s) => ({ ...s, [taskId]: true }))
+    setRowErr((r) => ({ ...r, [taskId]: undefined }))
+    try {
+      await beUpdateProgress(taskId, p)
+    } catch (e: any) {
+      setRowErr((r) => ({ ...r, [taskId]: e?.message || "Failed to update progress" }))
+    } finally {
+      setSaving((s) => ({ ...s, [taskId]: false }))
+    }
+  }
+
+  function onProgressCommit(taskId: number, p: number) {
+    const val = Math.max(0, Math.min(100, Math.round(p)))
+    setLocalProgress(taskId, val)
+    saveProgress(taskId, val)
+  }
+
+  // ===== Assign helpers =====
+  function openAssign(taskId: number) {
+    setAssignTaskId(taskId)
+    setAssignEmail("")
+    setAssignError(null)
+    setAssignOK(null)
+    setAssignOpen(true)
+  }
+
+  async function submitAssign() {
+    if (!assignTaskId) return
+    if (!assignEmail.trim()) {
+      setAssignError("Vui lòng nhập email")
+      return
+    }
+    setAssignLoading(true)
+    setAssignError(null)
+    setAssignOK(null)
+    try {
+      await beAssignByEmail(assignTaskId, assignEmail.trim())
+      setAssignOK("Giao việc thành công")
+      await load()
+      setTimeout(() => setAssignOpen(false), 400)
+    } catch (e: any) {
+      setAssignError(e?.message || "Giao việc thất bại")
+    } finally {
+      setAssignLoading(false)
     }
   }
 
@@ -180,7 +251,7 @@ export function ListView({ projectId, user }: ListViewProps) {
         <div className="min-w-[1200px]">
           {/* Header */}
           <div className="border-b border-border bg-muted/30">
-            <div className="grid grid-cols-[40px_80px_100px_1fr_120px_120px_120px_100px_100px_120px_40px] gap-4 px-6 py-3 text-xs font-medium text-muted-foreground">
+            <div className="grid grid-cols-[40px_80px_100px_1fr_120px_120px_120px_100px_120px_160px_40px] gap-4 px-6 py-3 text-xs font-medium text-muted-foreground">
               <div className="flex items-center"><Checkbox /></div>
               <div>Type</div>
               <div>Key</div>
@@ -189,8 +260,8 @@ export function ListView({ projectId, user }: ListViewProps) {
               <div>Assignee</div>
               <div>Due date</div>
               <div>Priority</div>
-              <div>Comments</div>
-              <div>Labels</div>
+              <div>Assign</div>
+              <div>Progress</div>
               <div className="flex justify-center"><Plus className="h-4 w-4" /></div>
             </div>
           </div>
@@ -201,72 +272,61 @@ export function ListView({ projectId, user }: ListViewProps) {
               variant="ghost"
               size="sm"
               className="h-8 text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setCreating(true)
-                setHasItems(true)
-              }}
+              onClick={() => setTaskOpen(true)}
             >
               <Plus className="h-4 w-4 mr-2" />
               Create
             </Button>
           </div>
 
-          {/* Create Row */}
-          {creating && (
-            <div className="grid grid-cols-[40px_80px_100px_1fr_120px_120px_120px_100px_100px_120px_40px] gap-4 px-6 py-3 border-b items-center">
-              <div />
-              <div>Task</div>
-              <div>—</div>
-              <div>
-                <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-              </div>
-              <div>
-                <select className="w-full h-9 border rounded px-2" value={status} onChange={(e) => setStatus(e.target.value as any)}>
-                  <option value="OPEN">Open</option>
-                  <option value="IN_PROGRESS">In progress</option>
-                  <option value="DONE">Done</option>
-                </select>
-              </div>
-              <div>
-                <Input placeholder="Assignee email" value={assigneeEmail} onChange={(e) => setAssigneeEmail(e.target.value)} />
-              </div>
-              <div>
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-              </div>
-              <div>
-                <select className="w-full h-9 border rounded px-2" value={priority} onChange={(e) => setPriority(e.target.value as any)}>
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="URGENT">Urgent</option>
-                </select>
-              </div>
-              <div>—</div>
-              <div>—</div>
-              <div className="flex justify-center">
-                <Button size="sm" onClick={handleCreate} disabled={loading || !title.trim()}>
-                  {loading ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </div>
-          )}
-
           {/* Data rows */}
-          {items.map((it) => (
-            <div key={it.id} className="grid grid-cols-[40px_80px_100px_1fr_120px_120px_120px_100px_100px_120px_40px] gap-4 px-6 py-3 border-b items-center">
-              <div><Checkbox /></div>
-              <div>Task</div>
-              <div>#{it.id}</div>
-              <div className="truncate">{it.title}</div>
-              <div>{it.status_name || "—"}</div>
-              <div>{it.assignee_name || "—"}</div>
-              <div>{it.due_date ? new Date(it.due_date).toLocaleDateString() : "—"}</div>
-              <div>{it.priority_name || "—"}</div>
-              <div>—</div>
-              <div>—</div>
-              <div />
-            </div>
-          ))}
+          {items.map((it) => {
+            const p = it.percent_done ?? 0
+            const isSaving = !!saving[it.id]
+            const err = rowErr[it.id]
+            return (
+              <div
+                key={it.id}
+                className="grid grid-cols-[40px_80px_100px_1fr_120px_120px_120px_100px_120px_160px_40px] gap-4 px-6 py-3 border-b items-center"
+              >
+                <div><Checkbox /></div>
+                <div>Task</div>
+                <div>#{it.id}</div>
+                <div className="truncate">{it.title}</div>
+                <div>{it.status_name || "—"}</div>
+                <div>{it.assignee_name || "—"}</div>
+                <div>{it.due_date ? new Date(it.due_date).toLocaleDateString() : "—"}</div>
+                <div>{it.priority_name || "—"}</div>
+
+                {/* Assign cell */}
+                <div>
+                  <Button variant="outline" size="sm" className="h-8 gap-2" onClick={() => openAssign(it.id)}>
+                    <Send className="w-4 h-4" />
+                    Assign
+                  </Button>
+                </div>
+
+                {/* Progress cell */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={p}
+                    onChange={(e) => setLocalProgress(it.id, Number(e.target.value))}
+                    onPointerUp={(e) => onProgressCommit(it.id, Number((e.target as HTMLInputElement).value))}
+                    onBlur={(e) => onProgressCommit(it.id, Number((e.target as HTMLInputElement).value))}
+                    className="w-28"
+                  />
+                  <span className="w-10 text-right tabular-nums">{p}%</span>
+                  {isSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
+                  {!isSaving && err && <span className="text-xs text-red-600">{err}</span>}
+                </div>
+
+                <div />
+              </div>
+            )
+          })}
         </div>
 
         {!hasItems && (
@@ -284,6 +344,114 @@ export function ListView({ projectId, user }: ListViewProps) {
       </div>
 
       {error && <div className="px-6 py-2 text-sm text-red-600">{error}</div>}
+
+      {/* ===== Create Task Modal (KHÔNG có ô Assignee) ===== */}
+      <Dialog open={taskOpen} onOpenChange={setTaskOpen}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Create task</DialogTitle>
+            <DialogDescription>Fill the fields below to add a new task to this project.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2">
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label htmlFor="title" className="text-right">Title</Label>
+              <Input
+                id="title"
+                className="col-span-3"
+                placeholder="Short, clear summary"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label htmlFor="status" className="text-right">Status</Label>
+              <select
+                id="status"
+                className="col-span-3 h-9 border rounded px-2 bg-background"
+                value={status}
+                onChange={(e) => setStatus(e.target.value as any)}
+              >
+                <option value="OPEN">Open</option>
+                <option value="IN_PROGRESS">In progress</option>
+                <option value="DONE">Done</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label htmlFor="due" className="text-right">Due date</Label>
+              <Input
+                id="due"
+                type="date"
+                className="col-span-3"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label htmlFor="priority" className="text-right">Priority</Label>
+              <select
+                id="priority"
+                className="col-span-3 h-9 border rounded px-2 bg-background"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as any)}
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTaskOpen(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={loading || !title.trim()}>
+              {loading ? "Saving..." : "Save task"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== Assign by Email Modal ===== */}
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Giao việc qua email</DialogTitle>
+            <DialogDescription>Nhập email người được giao. </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-2">
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label htmlFor="ass-email" className="text-right">Email</Label>
+              <Input
+                id="ass-email"
+                className="col-span-3"
+                placeholder="ooad.ptithcm@gmail.com"
+                value={assignEmail}
+                onChange={(e) => setAssignEmail(e.target.value)}
+              />
+            </div>
+            {assignError && <p className="text-sm text-red-600">{assignError}</p>}
+            {assignOK && <p className="text-sm text-green-600">{assignOK}</p>}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignOpen(false)} disabled={assignLoading}>
+              Close
+            </Button>
+            <Button onClick={submitAssign} disabled={assignLoading || !assignEmail.trim()}>
+              {assignLoading ? "Assigning…" : "Assign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

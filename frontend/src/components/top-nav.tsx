@@ -23,7 +23,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
               <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z" />
             </svg>
           </div>
-          <span className="font-semibold text-foreground hidden sm:inline">Jira</span>
+          <span className="font-semibold text-foreground hidden sm:inline">Kira</span>
         </div>
 
         <div className="relative flex-1 max-w-md hidden md:block">

@@ -65,11 +65,11 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
             <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center">
               <Grid3x3 className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-semibold">Jira</span>
+            <span className="text-2xl font-semibold">Kira</span>
           </div>
 
           <h1 className="text-4xl font-bold mb-2 text-balance">
-            Connect every team, task, and project together with Jira
+            Connect every team, task, and project together with Kira
           </h1>
 
           {/* Toggle giữa Login / Register */}
@@ -179,7 +179,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                   <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
                     <Grid3x3 className="w-4 h-4 text-white" />
                   </div>
-                  <span className="font-semibold">Jira</span>
+                  <span className="font-semibold">Kira</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">

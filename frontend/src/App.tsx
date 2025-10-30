@@ -65,7 +65,7 @@ export default function App() {
                 }`}
                 onClick={() => setActiveView("list")}
               >
-                List
+                List tasks
               </button>
             </div>
           </div>
